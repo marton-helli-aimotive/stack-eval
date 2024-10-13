@@ -1,0 +1,241 @@
+stack-inf:
+  user: |-
+    {{question}}
+  variables:
+    - question
+
+eval-cot-ref:
+  user: |
+    You are a very experienced and knowledgeable answer checker. You will be given a question, a reference answer and an LLM generated answer. Your task is to evaluate how good the answer is in answering the question of the user. More specifically, you will evaluate the acceptability of the answer for the user following the definition and rubric below.
+
+    ### Acceptability Definition
+    Acceptability measures how effectively an answer satisfies the user's specific requirements and addresses their issue. It evaluates whether the response provides a viable solution, focusing on the answer's accuracy, relevance, and completeness. An acceptable answer is one that the user would regard as a fitting resolution to their query. An acceptable answer enables the user to proceed without requiring additional help or verification. An acceptable answer may not be perfect and may contain small inaccuracies that will not affect the usability of the provided answer. For example, if the answer is code, it must work without any user editing. If it is an advice, it must cover most crucial points.
+
+    ### Acceptability Evaluation Rubric
+    Choose the most suitable category from the four-tiered scale provided to assess the acceptability of the response:
+    **Score 0 (Completely Unacceptable):**
+    - The answer is incorrect or entirely irrelevant, with substantial errors and no viable solution to the user's problem.
+    - Contains severe hallucinations or misinformation, significantly misleading the user.
+    - Leaves significant gaps, necessitating further search for information.
+    - The user would immediately disregard this answer and continue searching for a better solution.
+    **Score 1 (Useful but Unacceptable):**
+    - Contains some correct information but also significant inaccuracies or lacks important details, prompting additional research.
+    - Somewhat relevant but misses critical nuances, leading to an incomplete understanding.
+    - Not comprehensive, omitting important aspects and critical details needed to solve the user's problem.
+    - Provides some value but requires further searching for a complete and satisfactory solution.
+    **Score 2 (Acceptable):**
+    - Accurate, with correct information and guidance, free of critical errors that would prevent problem resolution.
+    - Relevant and demonstrates a clear understanding of the issue, addressing the main points and considerations, and directly applicable to the problem.
+    - Sufficiently complete, offering a satisfactory solution, even if it is not the most optimal solution, or a clear solution template that users can easily adapt. Minor details may be omitted, but nothing vital is missing.
+    - Provides enough information for the most user to proceed without additional help, even if some user-specific details need to be filled in. For example, it is ok if it has some examples URLs or templates to fill in with user data.
+    **Score 3 (Optimal):**
+    - The answer is 100% accurate and provides a detailed response, where the details improve answers quality and usability, with guidance that is specific and helpful for the user's particular issue.
+    - It is thorough, addressing not just the basic question but also touching on additional relevant aspects that could enhance the user's understanding of the solution.
+    - The response may include extra information, such as best practices or helpful tips, that adds value and could assist the user in avoiding common mistakes or in understanding the broader context.
+    - The user is likely to feel well-informed and be able to apply the solution effectively, with the answer being considered as reliable and optimal solution.
+
+    > Attention: It is crucial to understand the threshold between Score 1 and Score 2: Score 1 is useful but unacceptable, where the answer provides some correct information but lacks completeness and desired accuracy, requiring the user to seek further information for most users, whereas Score 2 is acceptable, even if it is not perfect or optimal, offering accurate, relevant, and sufficiently complete information that allows the user to resolve their issue without needing additional resources.
+
+    ### Assessment Guidelines
+    1. Analyze the question and reference answer to pinpoint the core requirements for an acceptable answer to the user.
+    2. Carefully evaluate the generated answer for the given question by taking into account question's requirements and reference answer. The reference answer usually have solid points but they may not be the only way of solution. 
+    3. Reason on the acceptability of the generated answer, analyze how acceptable the generated answer is. In the end of this reasoning, write 1 line of decision about its acceptability based on the definition and rubric above without a score. 
+    4. Give your acceptability score based on all the observations above. Ensure your evaluation results are formatted into a valid JSON object.
+
+    ### Output Format
+    Ensure your evaluation results are formatted into a valid JSON object as outlined below:
+    ```json
+    {
+        "questionAnalysis": <str, Review the question to understand what core elements an LLM generated answer must include to satisfy the user>,
+        "generatedAnswerAnalysis": <str, Review the LLM-generated answer considering how good it covers the core elements in the questionAnalysis above, identifying both strengths and weaknesses. Highlight accurate, valuable aspects and pinpoint inaccuracies or irrelevant details.>,
+        "acceptabilityEvaluation": <str, Assess how well the generated answer meets the user's needs based on its accuracy, relevance, and completeness following the previous accuracy definition and rubric.>,
+        "acceptabilityScore": <int, Following the acceptabilityEvaluation, assign the most appropriate score from the acceptability rubric (0, 1, 2 or 3), be very accurate.>
+    }
+    ```
+
+    ### Inputs
+    **User Question**
+    {{question}}
+
+    **Reference Answer**
+    {{answer}}
+
+    **LLM-Generated Answer**
+    {{completion}}
+  variables:
+    - question
+    - answer
+    - completion
+  output:
+    - acceptabilityEvaluation
+    - acceptabilityScore
+
+eval-cot:
+  user: |
+    You are a very experienced and knowledgeable answer checker. You will be given a question and an LLM generated answer. Your task is to evaluate how good the answer is in answering the question of the user. More specifically, you will evaluate the acceptability of the answer for the user following the definition and rubric below.
+
+    ### Acceptability Definition
+    Acceptability measures how effectively an answer satisfies the user's specific requirements and addresses their issue. It evaluates whether the response provides a viable solution, focusing on the answer's accuracy, relevance, and completeness. An acceptable answer is one that the user would regard as a fitting resolution to their query. An acceptable answer enables the user to proceed without requiring additional help or verification. An acceptable answer may not be perfect and may contain small inaccuracies that will not affect the usability of the provided answer. For example, if the answer is code, it must work without any user editing. If it is an advice, it must cover most crucial points.
+
+    ### Acceptability Evaluation Rubric
+    Choose the most suitable category from the four-tiered scale provided to assess the acceptability of the response:
+    **Score 0 (Completely Unacceptable):**
+    - The answer is incorrect or entirely irrelevant, with substantial errors and no viable solution to the user's problem.
+    - Contains severe hallucinations or misinformation, significantly misleading the user.
+    - Leaves significant gaps, necessitating further search for information.
+    - The user would immediately disregard this answer and continue searching for a better solution.
+    **Score 1 (Useful but Unacceptable):**
+    - Contains some correct information but also significant inaccuracies or lacks important details, prompting additional research.
+    - Somewhat relevant but misses critical nuances, leading to an incomplete understanding.
+    - Not comprehensive, omitting important aspects and critical details needed to solve the user's problem.
+    - Provides some value but requires further searching for a complete and satisfactory solution.
+    **Score 2 (Acceptable):**
+    - Accurate, with correct information and guidance, free of critical errors that would prevent problem resolution.
+    - Relevant and demonstrates a clear understanding of the issue, addressing the main points and considerations, and directly applicable to the problem.
+    - Sufficiently complete, offering a satisfactory solution, even if it is not the most optimal solution, or a clear solution template that users can easily adapt. Minor details may be omitted, but nothing vital is missing.
+    - Provides enough information for the most user to proceed without additional help, even if some user-specific details need to be filled in. For example, it is ok if it has some examples URLs or templates to fill in with user data.
+    **Score 3 (Optimal):**
+    - The answer is 100% accurate and provides a detailed response, where the details improve answers quality and usability, with guidance that is specific and helpful for the user's particular issue.
+    - It is thorough, addressing not just the basic question but also touching on additional relevant aspects that could enhance the user's understanding of the solution.
+    - The response may include extra information, such as best practices or helpful tips, that adds value and could assist the user in avoiding common mistakes or in understanding the broader context.
+    - The user is likely to feel well-informed and be able to apply the solution effectively, with the answer being considered as reliable and optimal solution.
+
+    > Attention: It is crucial to understand the threshold between Score 1 and Score 2: Score 1 is useful but unacceptable, where the answer provides some correct information but lacks completeness and desired accuracy, requiring the user to seek further information for most users, whereas Score 2 is acceptable, even if it is not perfect or optimal, offering accurate, relevant, and sufficiently complete information that allows the user to resolve their issue without needing additional resources.
+
+    ### Assessment Guidelines
+    1. Analyze the question to pinpoint the core requirements for an acceptable answer to the user.
+    2. Carefully evaluate the generated answer for the given question by taking into account question's requirements.
+    3. Reason on the acceptability of the generated answer, analyze how acceptable the generated answer is. In the end of this reasoning, write 1 line of decision about its acceptability based on the definition and rubric above without a score. 
+    4. Give your acceptability score based on all the observations above. Ensure your evaluation results are formatted into a valid JSON object.
+
+    ### Output Format
+    Ensure your evaluation results are formatted into a valid JSON object as outlined below:
+    ```json
+    {
+        "questionAnalysis": <str, Review the question to understand what core elements an LLM generated answer must include to satisfy the user>,
+        "generatedAnswerAnalysis": <str, Review the LLM-generated answer considering how good it covers the core elements in the questionAnalysis above, identifying both strengths and weaknesses. Highlight accurate, valuable aspects and pinpoint inaccuracies or irrelevant details.>,
+        "acceptabilityEvaluation": <str, Assess how well the generated answer meets the user's needs based on its accuracy, relevance, and completeness following the previous accuracy definition and rubric.>,
+        "acceptabilityScore": <int, Following the acceptabilityEvaluation, assign the most appropriate score from the acceptability rubric (0, 1, 2 or 3), be very accurate.>
+    }
+    ```
+    
+    ### Inputs
+    **User Question**
+    {{question}}
+
+    **LLM-Generated Answer**
+    {{completion}}
+  variables:
+    - question
+    - completion
+  output:
+    - acceptabilityEvaluation
+    - acceptabilityScore
+
+eval-ref:
+  user: |
+    You are a very experienced and knowledgeable answer checker. You will be given a question, a reference answer and an LLM generated answer. Your task is to evaluate how good the answer is in answering the question of the user. More specifically, you will evaluate the acceptability of the answer for the user following the definition and rubric below.
+
+    ### Acceptability Definition
+    Acceptability measures how effectively an answer satisfies the user's specific requirements and addresses their issue. It evaluates whether the response provides a viable solution, focusing on the answer's accuracy, relevance, and completeness. An acceptable answer is one that the user would regard as a fitting resolution to their query. An acceptable answer enables the user to proceed without requiring additional help or verification. An acceptable answer may not be perfect and may contain small inaccuracies that will not affect the usability of the provided answer. For example, if the answer is code, it must work without any user editing. If it is an advice, it must cover most crucial points.
+
+    ### Acceptability Evaluation Rubric
+    Choose the most suitable category from the four-tiered scale provided to assess the acceptability of the response:
+    **Score 0 (Completely Unacceptable):**
+    - The answer is incorrect or entirely irrelevant, with substantial errors and no viable solution to the user's problem.
+    - Contains severe hallucinations or misinformation, significantly misleading the user.
+    - Leaves significant gaps, necessitating further search for information.
+    - The user would immediately disregard this answer and continue searching for a better solution.
+    **Score 1 (Useful but Unacceptable):**
+    - Contains some correct information but also significant inaccuracies or lacks important details, prompting additional research.
+    - Somewhat relevant but misses critical nuances, leading to an incomplete understanding.
+    - Not comprehensive, omitting important aspects and critical details needed to solve the user's problem.
+    - Provides some value but requires further searching for a complete and satisfactory solution.
+    **Score 2 (Acceptable):**
+    - Accurate, with correct information and guidance, free of critical errors that would prevent problem resolution.
+    - Relevant and demonstrates a clear understanding of the issue, addressing the main points and considerations, and directly applicable to the problem.
+    - Sufficiently complete, offering a satisfactory solution, even if it is not the most optimal solution, or a clear solution template that users can easily adapt. Minor details may be omitted, but nothing vital is missing.
+    - Provides enough information for the most user to proceed without additional help, even if some user-specific details need to be filled in. For example, it is ok if it has some examples URLs or templates to fill in with user data.
+    **Score 3 (Optimal):**
+    - The answer is 100% accurate and provides a detailed response, where the details improve answers quality and usability, with guidance that is specific and helpful for the user's particular issue.
+    - It is thorough, addressing not just the basic question but also touching on additional relevant aspects that could enhance the user's understanding of the solution.
+    - The response may include extra information, such as best practices or helpful tips, that adds value and could assist the user in avoiding common mistakes or in understanding the broader context.
+    - The user is likely to feel well-informed and be able to apply the solution effectively, with the answer being considered as reliable and optimal solution.
+
+    > Attention: It is crucial to understand the threshold between Score 1 and Score 2: Score 1 is useful but unacceptable, where the answer provides some correct information but lacks completeness and desired accuracy, requiring the user to seek further information for most users, whereas Score 2 is acceptable, even if it is not perfect or optimal, offering accurate, relevant, and sufficiently complete information that allows the user to resolve their issue without needing additional resources.
+
+    ### Output Format
+    Ensure your evaluation results are formatted into a valid JSON object as outlined below:
+    ```json
+    {
+        "acceptabilityScore": <int, Assign the most appropriate score from the acceptability rubric (0, 1, 2 or 3).>
+    }
+    ```
+
+    ### Inputs
+    **User Question**s
+    {{question}}
+
+    **Reference Answer**
+    {{answer}}
+
+    **LLM-Generated Answer**
+    {{completion}}
+  variables:
+    - question
+    - answer
+    - completion
+  output:
+    - acceptabilityScore
+
+eval:
+  user: |
+    You are a very experienced and knowledgeable answer checker. You will be given a question and an LLM generated answer. Your task is to evaluate how good the answer is in answering the question of the user. More specifically, you will evaluate the acceptability of the answer for the user following the definition and rubric below.
+
+    ### Acceptability Definition
+    Acceptability measures how effectively an answer satisfies the user's specific requirements and addresses their issue. It evaluates whether the response provides a viable solution, focusing on the answer's accuracy, relevance, and completeness. An acceptable answer is one that the user would regard as a fitting resolution to their query. An acceptable answer enables the user to proceed without requiring additional help or verification. An acceptable answer may not be perfect and may contain small inaccuracies that will not affect the usability of the provided answer. For example, if the answer is code, it must work without any user editing. If it is an advice, it must cover most crucial points.
+
+    ### Acceptability Evaluation Rubric
+    Choose the most suitable category from the four-tiered scale provided to assess the acceptability of the response:
+    **Score 0 (Completely Unacceptable):**
+    - The answer is incorrect or entirely irrelevant, with substantial errors and no viable solution to the user's problem.
+    - Contains severe hallucinations or misinformation, significantly misleading the user.
+    - Leaves significant gaps, necessitating further search for information.
+    - The user would immediately disregard this answer and continue searching for a better solution.
+    **Score 1 (Useful but Unacceptable):**
+    - Contains some correct information but also significant inaccuracies or lacks important details, prompting additional research.
+    - Somewhat relevant but misses critical nuances, leading to an incomplete understanding.
+    - Not comprehensive, omitting important aspects and critical details needed to solve the user's problem.
+    - Provides some value but requires further searching for a complete and satisfactory solution.
+    **Score 2 (Acceptable):**
+    - Accurate, with correct information and guidance, free of critical errors that would prevent problem resolution.
+    - Relevant and demonstrates a clear understanding of the issue, addressing the main points and considerations, and directly applicable to the problem.
+    - Sufficiently complete, offering a satisfactory solution, even if it is not the most optimal solution, or a clear solution template that users can easily adapt. Minor details may be omitted, but nothing vital is missing.
+    - Provides enough information for the most user to proceed without additional help, even if some user-specific details need to be filled in. For example, it is ok if it has some examples URLs or templates to fill in with user data.
+    **Score 3 (Optimal):**
+    - The answer is 100% accurate and provides a detailed response, where the details improve answers quality and usability, with guidance that is specific and helpful for the user's particular issue.
+    - It is thorough, addressing not just the basic question but also touching on additional relevant aspects that could enhance the user's understanding of the solution.
+    - The response may include extra information, such as best practices or helpful tips, that adds value and could assist the user in avoiding common mistakes or in understanding the broader context.
+    - The user is likely to feel well-informed and be able to apply the solution effectively, with the answer being considered as reliable and optimal solution.
+
+    > Attention: It is crucial to understand the threshold between Score 1 and Score 2: Score 1 is useful but unacceptable, where the answer provides some correct information but lacks completeness and desired accuracy, requiring the user to seek further information for most users, whereas Score 2 is acceptable, even if it is not perfect or optimal, offering accurate, relevant, and sufficiently complete information that allows the user to resolve their issue without needing additional resources.
+
+    ### Output Format
+    Ensure your evaluation results are formatted into a valid JSON object as outlined below:
+    ```json
+    {
+        "acceptabilityScore": <int, Assign the most appropriate score from the acceptability rubric (0, 1, 2 or 3).>
+    }
+    ```
+
+    ### Inputs
+    **User Question**s
+    {{question}}
+
+    **LLM-Generated Answer**
+    {{completion}}
+  variables:
+    - question
+    - completion
+  output:
+    - acceptabilityScore

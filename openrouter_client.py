@@ -4,6 +4,7 @@ import requests
 import yaml
 from typing import Dict, List, Optional
 from datetime import datetime, timedelta
+import time
 import logging
 
 logger = logging.getLogger(__name__)
@@ -203,9 +204,13 @@ class OpenRouterClient:
             "messages": messages,
             **kwargs
         }
+        # Ask OpenRouter to include usage statistics in the response if not explicitly provided
+        if "usage" not in data:
+            data["usage"] = {"include": True}
         
         try:
             timeout_value = float(kwargs.pop("timeout", self.request_timeout))
+            start_time = time.perf_counter()
             response = requests.post(
                 f"{self.base_url}/chat/completions",
                 headers=headers,
@@ -213,8 +218,20 @@ class OpenRouterClient:
                 timeout=timeout_value,
             )
             response.raise_for_status()
-            
+            elapsed_sec = time.perf_counter() - start_time
             result = response.json()
+            try:
+                usage = result.get("usage") or {}
+                prompt_tokens = usage.get("prompt_tokens") or usage.get("input_tokens")
+                completion_tokens = usage.get("completion_tokens") or usage.get("output_tokens")
+                total_tokens = usage.get("total_tokens")
+                total_cost = usage.get("total_cost") or usage.get("native_cost")
+                logger.info(
+                    f"OpenRouter usage model={model}: prompt_tokens={prompt_tokens}, completion_tokens={completion_tokens}, total_tokens={total_tokens}, total_cost={total_cost}, duration_sec={elapsed_sec:.3f}"
+                )
+            except Exception:
+                # Do not fail on usage logging
+                pass
             return result["choices"][0]["message"]["content"]
             
         except requests.exceptions.HTTPError as e:

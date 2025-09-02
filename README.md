@@ -73,7 +73,7 @@ This will generate scores for each question on a `0-3` scale. A completion is sa
 **Note**: Model names now use the format `provider/model-id` (e.g., `openai/gpt-4o`, `anthropic/claude-3-5-sonnet`).
 
 ### Dashboard
-We provide a comprehensive Streamlit dashboard that combines coding problems exploration with live evaluation score tracking. The dashboard can be launched with the following command:
+We provide a comprehensive Streamlit dashboard that combines coding tasks exploration with live evaluation score tracking. The dashboard can be launched with the following command:
 ```
 streamlit run dashboard.py
 ```
@@ -82,9 +82,9 @@ streamlit run dashboard.py
 - **Live Evaluation Scores**: Real-time display of evaluation metrics based on selected models and tasks
 - **Model Selection**: Choose from cached OpenRouter models for both inferencer/evaluatee and judge/evaluator roles
 - **Task Selection**: Switch between stack-eval and stack-unseen tasks
-- **Coding Problems**: Browse, filter, and search through the coding problems dataset
-- **Interactive Charts**: Visualize problem distributions by type, complexity, and programming language
-- **Random Problem Generator**: Get random problems for practice or testing
+- **Coding tasks**: Browse, filter, and search through the coding tasks dataset
+- **Interactive Charts**: Visualize task distributions by type, complexity, and programming language
+- **Random task Generator**: Get random tasks for practice or testing
 
 **Model Selection:**
 The dashboard automatically loads available models from `config/openrouter_models_cache.yml` and provides:

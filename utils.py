@@ -120,17 +120,20 @@ def parse_json(json_str: str, expected_keys: list | set, default_value=None) -> 
         expected_keys = set(expected_keys)
 
     try:
-        data = dict(json_repair.loads(json_str))
+        loaded = json_repair.loads(json_str)
+        if not isinstance(loaded, dict):
+            # Not an object -> cannot extract expected keys
+            return {}
+        data = loaded
     except (ValueError, TypeError) as e:
         print(f"Error parsing JSON: {e}")
         return {}
 
-    data = {key: data.get(key, default_value) for key in expected_keys}
-    return data
+    return {key: data.get(key, default_value) for key in expected_keys}
 
 
 def batch_parse_json(
-    json_strs: list[str], expected_keys: list | set, default_value=None
+    json_strs: list[str] | str, expected_keys: list | set, default_value=None
 ) -> list[dict]:
     """
     Parses a list of JSON strings and returns a list of dictionaries containing the values of the expected keys.
@@ -143,6 +146,8 @@ def batch_parse_json(
     Returns:
         list[dict]: A list of dictionaries containing the values of the expected keys for each JSON string.
     """
+    if isinstance(json_strs, str):
+        json_strs = [json_strs]
     return [parse_json(j, expected_keys, default_value) for j in json_strs]
 
 
@@ -210,7 +215,7 @@ def completion(
     rate_limit: int = None,
     verbose: bool = True,
     **kwargs,
-) -> str:
+) -> list[str]:
     """
     Generate completions for a list of messages using OpenRouter API.
 
@@ -222,7 +227,7 @@ def completion(
         verbose (bool, optional): Whether to display progress information. Defaults to True.
 
     Returns:
-        str: The completion response from the language model.
+        list[str]: One completion string per input message (always a list).
     """
     if isinstance(messages[0], dict):
         messages = [messages]
@@ -246,8 +251,8 @@ def completion(
     
     # Providers return strings directly
     completions = [r if isinstance(r, str) else "" for r in responses]
-
-    return completions[0] if len(completions) == 1 else completions
+    # Always return a list, even for a single input
+    return completions
 
 
 def setup_logger(name: str):

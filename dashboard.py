@@ -1,5 +1,6 @@
 import streamlit as st
 import pandas as pd
+import altair as alt
 import json
 import yaml
 import os
@@ -77,17 +78,23 @@ def load_evaluation_data(path: str) -> pd.DataFrame:
     for file in files:
         try:
             df = pd.read_json(file, lines=True)[['questionId', 'questionMetadata', 'model', 'modelMetadata', 'acceptabilityScore']]
+            # Coerce None to empty dicts before .get usage
+            df['questionMetadata'] = df['questionMetadata'].apply(lambda v: v if isinstance(v, dict) and v is not None else {})
+            df['modelMetadata'] = df['modelMetadata'].apply(lambda v: v if isinstance(v, dict) and v is not None else {})
+            # Acceptance flag
             df['acceptance'] = (df['acceptabilityScore'] >= 2).astype(int)
             
-            # Extract metadata fields
+            # Extract metadata fields safely
             df['type'] = df['questionMetadata'].apply(lambda x: x.get('type', ''))
             df['level'] = df['questionMetadata'].apply(lambda x: x.get('level', ''))
             df['tag'] = df['questionMetadata'].apply(lambda x: x.get('tag', ''))
             
-            # Extract model metadata
+            # Extract model metadata safely
             df['name'] = df['modelMetadata'].apply(lambda x: x.get('name', ''))
             df['provider'] = df['modelMetadata'].apply(lambda x: x.get('provider', ''))
             
+            # Drop rows without a valid questionId (can occur if a partial/invalid line is saved)
+            df = df.dropna(subset=['questionId'])
             # Drop the original metadata columns
             df = df.drop(['questionMetadata', 'modelMetadata', 'acceptabilityScore'], axis=1)
             evals.append(df)
@@ -557,42 +564,71 @@ def main():
     # Tab 1: Coding Tasks
     with tab1:                
         # Live status and evaluation (updated with filters)
-        # First, check inference existence independently of judge selection
-        inference_exists = False
-        if inferencer_model:
-            inference_exists = os.path.exists(_inference_output_path(selected_dataset, inferencer_model))
-            if not inference_exists:
-                st.warning(f"No inference results found for the selected combination: {selected_dataset}, {inferencer_model}.")
+        subset_qids = set(filtered_df['questionId'].astype(str).tolist()) if not filtered_df.empty else set()
+        answers_map = load_inference_answers(selected_dataset, inferencer_model) if inferencer_model else {}
+        eval_map = load_evaluation_results(selected_dataset, inferencer_model, judge_model) if (inferencer_model and judge_model) else {}
+        have_inf_ids = {str(qid) for qid, comp in answers_map.items() if isinstance(comp, str) and len(comp) > 0}
+        have_eval_ids = {str(qid) for qid, rec in eval_map.items() if rec and rec.get('acceptabilityScore') is not None}
+        missing_inference_ids = list(subset_qids - have_inf_ids)
+        missing_eval_ids = list((subset_qids & have_inf_ids) - have_eval_ids)
 
-        # Then, if a judge is selected and inference exists, show evaluation metrics/warnings
+        # Show inference-only status if judge not selected
+        if inferencer_model and not judge_model:
+            subset_total = len(subset_qids)
+            inf_count = len(subset_qids & have_inf_ids)
+            if subset_total == 0:
+                st.warning("No tasks match the current filters.")
+            else:
+                if inf_count == 0:
+                    st.warning(f"No inference results for current filters using {inferencer_model}.")
+                elif inf_count < subset_total:
+                    st.warning(f"Inference partial: {inf_count}/{subset_total} tasks have model answers.")
+                else:
+                    st.success(f"Inference complete: {inf_count}/{subset_total} tasks have model answers.")
+
+        # Live evaluation and inference status synced with filters (3-state messaging)
         if inferencer_model and judge_model:
             st.subheader("📊 Live Evaluation Score")
-            if inference_exists:
-                st.success("Inference results ready")
-                # Get evaluation score with current filters
-                evaluation_score = get_evaluation_score(
-                    selected_dataset, inferencer_model, judge_model,
-                    selected_types, selected_levels, selected_languages
-                )
 
-                if evaluation_score['data_loaded']:
-                    st.success("Evaluation results ready")
+            subset_total = len(subset_qids)
+            inf_count = len(subset_qids & have_inf_ids)
+            eval_count = len(subset_qids & have_eval_ids)
+
+            if subset_total == 0:
+                st.warning("No tasks match the current filters.")
+            else:
+                # Inference status (3 states)
+                if inf_count == 0:
+                    st.warning(f"No inference results for current filters using {inferencer_model}.")
+                elif inf_count < subset_total:
+                    st.warning(f"Inference partial: {inf_count}/{subset_total} tasks have model answers.")
+                else:
+                    st.success(f"Inference complete: {inf_count}/{subset_total} tasks have model answers.")
+
+                # Evaluation status (3 states)
+                if eval_count == 0:
+                    st.warning(f"No evaluation results for current filters using {judge_model}.")
+                elif eval_count < subset_total:
+                    st.warning(f"Evaluation partial: {eval_count}/{subset_total} tasks have judge scores.")
+                else:
+                    st.success(f"Evaluation complete: {eval_count}/{subset_total} tasks have judge scores.")
+
+                # Show metrics only when evaluation fully covers the current subset
+                if eval_count == subset_total and subset_total > 0:
+                    evaluation_score = get_evaluation_score(
+                        selected_dataset, inferencer_model, judge_model,
+                        selected_types, selected_levels, selected_languages
+                    )
+
                     col1, col2, col3, col4 = st.columns(4)
-                    
                     with col1:
                         st.metric("Task", selected_dataset.replace("-", " ").title())
-                    
                     with col2:
                         st.metric("Total Questions", evaluation_score['total_questions'])
-                    
                     with col3:
                         st.metric("Accepted Solutions", evaluation_score['accepted_questions'])
-                    
                     with col4:
                         st.metric("Acceptance Rate", f"{evaluation_score['acceptance_rate']:.1f}%")
-                else:
-                    st.warning(f"No evaluation data found for the selected combination: {selected_dataset}, {inferencer_model} and {judge_model}.")
-            # If inference does not exist, we've already shown the inference warning above; don't show evaluation warning.
         
         # Action buttons for running inference/evaluation
             st.markdown("---")
@@ -601,17 +637,28 @@ def main():
                 run_inf_disabled = (
                     st.session_state.get("is_running", False)
                     or inferencer_model is None
-                    or os.path.exists(_inference_output_path(selected_dataset, inferencer_model))
+                    or len(missing_inference_ids) == 0
                 )
                 if st.button("🧠 Solve tasks", disabled=run_inf_disabled):
                     try:
                         st.session_state["is_running"] = True
                         # Call directly so logs appear in the terminal running Streamlit
                         with st.spinner("Running inference... check the terminal for detailed progress."):
-                            inference_module.main(selected_dataset, inferencer_model)
+                            inference_module.main(
+                                selected_dataset,
+                                inferencer_model,
+                                types=selected_types,
+                                levels=selected_levels,
+                                tags=selected_languages,
+                                skip_existing=True,
+                            )
                     except Exception as e:
                         st.error(f"Inference failed: {e}")
                     finally:
+                        try:
+                            load_inference_answers.clear()
+                        except Exception:
+                            pass
                         st.session_state["is_running"] = False
                         st.rerun()
             with col_run2:
@@ -619,21 +666,33 @@ def main():
                     st.session_state.get("is_running", False)
                     or inferencer_model is None
                     or judge_model is None
-                    or not os.path.exists(_inference_output_path(selected_dataset, inferencer_model))
-                    or os.path.exists(_evaluation_output_path(selected_dataset, inferencer_model, judge_model))
+                    or len(missing_eval_ids) == 0
                 )
                 if st.button("⚖️ Judge solutions", disabled=run_eval_disabled):
                     try:
                         st.session_state["is_running"] = True
                         # Use default prompt name used across the app
                         with st.spinner("Running evaluation... check the terminal for detailed progress."):
-                            evaluation_module.main(selected_dataset, "eval-cot-ref", inferencer_model, judge_model)
+                            evaluation_module.main(
+                                selected_dataset,
+                                "eval-cot-ref",
+                                inferencer_model,
+                                judge_model,
+                                types=selected_types,
+                                levels=selected_levels,
+                                tags=selected_languages,
+                                skip_existing=True,
+                            )
                     except Exception as e:
                         st.error(f"Evaluation failed: {e}")
                     finally:
                         # Clear cached eval data so Live score refreshes
                         try:
                             load_evaluation_data.clear()
+                        except Exception:
+                            pass
+                        try:
+                            load_evaluation_results.clear()
                         except Exception:
                             pass
                         st.session_state["is_running"] = False
@@ -663,20 +722,58 @@ def main():
             col_chart1, col_chart2 = st.columns(2)
             
             with col_chart1:
-                type_counts = filtered_df['type'].value_counts()
-                st.bar_chart(type_counts)
-                st.caption("Distribution by Question Type")
+                # Build status per questionId based on evaluation score
+                def _status_for_qid(qid: str) -> str:
+                    if not (inferencer_model and judge_model and eval_map):
+                        return "Not evaluated"
+                    rec = eval_map.get(qid)
+                    if not rec or rec.get("acceptabilityScore") is None:
+                        return "Not evaluated"
+                    try:
+                        s = int(rec.get("acceptabilityScore"))
+                    except Exception:
+                        return "Not evaluated"
+                    labels = {
+                        0: "Completely Unacceptable",
+                        1: "Useful but Unacceptable",
+                        2: "Acceptable",
+                        3: "Optimal",
+                    }
+                    return labels.get(s, "Not evaluated")
+
+                vis_df = filtered_df.copy()
+                vis_df["qid"] = vis_df["questionId"].astype(str)
+                vis_df["status"] = vis_df["qid"].apply(_status_for_qid)
+
+                def _stacked_chart(df: pd.DataFrame, col: str, title: str):
+                    agg = df.groupby([col, "status"]).size().reset_index(name="count")
+                    domain = [
+                        "Completely Unacceptable",
+                        "Useful but Unacceptable",
+                        "Acceptable",
+                        "Optimal",
+                        "Not evaluated",
+                    ]
+                    colors = ["#e74c3c", "#e67e22", "#f1c40f", "#2ecc71", "#3498db"]
+                    chart = alt.Chart(agg).mark_bar().encode(
+                        x=alt.X(f"{col}:N", sort='-y', title=title),
+                        y=alt.Y("count:Q", title="Count"),
+                        color=alt.Color("status:N", scale=alt.Scale(domain=domain, range=colors), legend=alt.Legend(title="Status")),
+                        tooltip=[col, "status", "count"],
+                    )
+                    st.altair_chart(chart, use_container_width=True)
+
+                _stacked_chart(vis_df, "type", "Question Type")
+                st.caption("Distribution by Question Type (color-coded by evaluation status)")
             
             with col_chart2:
-                level_counts = filtered_df['level'].value_counts()
-                st.bar_chart(level_counts)
-                st.caption("Distribution by Complexity Level")
+                _stacked_chart(vis_df, "level", "Complexity Level")
+                st.caption("Distribution by Complexity Level (color-coded by evaluation status)")
             
             # Programming language distribution
             st.markdown("---")
             st.subheader("🔤 Programming Language Distribution")
-            lang_counts = filtered_df['tag'].value_counts()
-            st.bar_chart(lang_counts)
+            _stacked_chart(vis_df, "tag", "Programming Language")
         
         # Task list
         if len(filtered_df) > 0:
@@ -793,7 +890,18 @@ def main():
                 st.warning("No evaluated models found for the selected dataset and judge.")
             else:
                 rows = []
+                hidden_partial = 0
+                subset_qids_lead = set(filtered_df['questionId'].astype(str).tolist()) if not filtered_df.empty else set()
                 for model_id in evaluated_models:
+                    # Include only models that have complete evaluation for current subset
+                    eval_map_model = load_evaluation_results(selected_dataset, model_id, judge_model)
+                    have_eval_ids_model = {qid for qid, rec in eval_map_model.items() if rec and rec.get('acceptabilityScore') is not None}
+                    covered = subset_qids_lead <= have_eval_ids_model if subset_qids_lead else False
+                    if not covered:
+                        if len(subset_qids_lead & have_eval_ids_model) > 0:
+                            hidden_partial += 1
+                        continue
+
                     score = get_evaluation_score(
                         selected_dataset,
                         model_id,
@@ -836,6 +944,8 @@ def main():
                     )
 
                     st.caption("Leaderboard reflects the currently selected Dataset, Judge and filters.")
+                    if hidden_partial > 0:
+                        st.warning(f"{hidden_partial} model(s) have partial results for this selection and are hidden.")
 
     # Footer
     st.markdown("---")

@@ -73,24 +73,25 @@ This will generate scores for each question on a `0-3` scale. A completion is sa
 **Note**: Model names now use the format `provider/model-id` (e.g., `openai/gpt-4o`, `anthropic/claude-3-5-sonnet`).
 
 ### Dashboard
-We also provided a streamlit app to view and analyze the evaluation results, which can be launched with the following command:
+We provide a comprehensive Streamlit dashboard that combines coding problems exploration with live evaluation score tracking. The dashboard can be launched with the following command:
 ```
 streamlit run dashboard.py
 ```
-Ensure that the `STACK_EVAL_DIR` and `STACK_UNSEEN_DIR` constants in [dashboard.py](./dashboard.py) are correctly pointed to the evaluation output directory, and at least one evaluation is present.
 
-### Testing OpenRouter Integration
-To verify that the OpenRouter integration is working correctly:
-```bash
-# Test model fetching and chat completion
-python3 test_openrouter.py
+**Features:**
+- **Live Evaluation Scores**: Real-time display of evaluation metrics based on selected models and tasks
+- **Model Selection**: Choose from cached OpenRouter models for both inferencer/evaluatee and judge/evaluator roles
+- **Task Selection**: Switch between stack-eval and stack-unseen tasks
+- **Coding Problems**: Browse, filter, and search through the coding problems dataset
+- **Interactive Charts**: Visualize problem distributions by type, complexity, and programming language
+- **Random Problem Generator**: Get random problems for practice or testing
 
-# Refresh the models cache manually
-python3 refresh_models.py
-```
+**Model Selection:**
+The dashboard automatically loads available models from `config/openrouter_models_cache.yml` and provides:
+- **Inferencer/Evaluatee Model**: The model that generates solutions to be evaluated
+- **Judge/Evaluator Model**: The model that evaluates the generated solutions
+- **Task Selection**: Choose between stack-eval and stack-unseen evaluation tasks
 
----
+**Live Updates:**
+Evaluation scores update automatically based on the output folder structure and JSONL files, providing real-time insights into model performance.
 
-### Contact
-
-Please contact Nidhish Shah `nidhish.shah[at]prosus[dot]com`, Zulkuf Genc `zulkuf.genc[at]prosus[dot]com` and Dogu Araci `dogu.araci[at]prosus[dot]com` about any StackEval related issues and questions.

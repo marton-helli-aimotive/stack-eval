@@ -1,0 +1,115 @@
+_cache_time: '2025-09-02T16:59:50.506592'
+openwebui/codestral:22b: &id001
+  custom_llm_provider: openwebui
+  model_metadata:
+    context_length: 0
+    description: ''
+    name: codestral:22b
+    provider: openwebui
+  model_parameters:
+    model: codestral:22b
+    rate_limit: 120
+  sample_parameters:
+    max_tokens: 2048
+    seed: 42
+    temperature: 0.01
+openwebui/deepseek-r1:70b:
+  custom_llm_provider: openwebui
+  model_metadata:
+    context_length: 0
+    description: ''
+    name: deepseek-r1:70b
+    provider: openwebui
+  model_parameters:
+    model: deepseek-r1:70b
+    rate_limit: 120
+  sample_parameters:
+    max_tokens: 2048
+    seed: 42
+    temperature: 0.01
+openwebui/deepseek-v2.5:236b:
+  custom_llm_provider: openwebui
+  model_metadata:
+    context_length: 0
+    description: ''
+    name: deepseek-v2.5:236b
+    provider: openwebui
+  model_parameters:
+    model: deepseek-v2.5:236b
+    rate_limit: 120
+  sample_parameters:
+    max_tokens: 2048
+    seed: 42
+    temperature: 0.01
+openwebui/default: *id001
+openwebui/default-json: *id001
+openwebui/gemma3:12b:
+  custom_llm_provider: openwebui
+  model_metadata:
+    context_length: 0
+    description: ''
+    name: gemma3:12b
+    provider: openwebui
+  model_parameters:
+    model: gemma3:12b
+    rate_limit: 120
+  sample_parameters:
+    max_tokens: 2048
+    seed: 42
+    temperature: 0.01
+openwebui/gpt-oss:120b:
+  custom_llm_provider: openwebui
+  model_metadata:
+    context_length: 0
+    description: ''
+    name: gpt-oss:120b
+    provider: openwebui
+  model_parameters:
+    model: gpt-oss:120b
+    rate_limit: 120
+  sample_parameters:
+    max_tokens: 2048
+    seed: 42
+    temperature: 0.01
+openwebui/granite-code:8b:
+  custom_llm_provider: openwebui
+  model_metadata:
+    context_length: 0
+    description: ''
+    name: granite-code:8b
+    provider: openwebui
+  model_parameters:
+    model: granite-code:8b
+    rate_limit: 120
+  sample_parameters:
+    max_tokens: 2048
+    seed: 42
+    temperature: 0.01
+openwebui/qwen3-coder:30b:
+  custom_llm_provider: openwebui
+  model_metadata:
+    context_length: 0
+    description: ''
+    name: qwen3-coder:30b
+    provider: openwebui
+  model_parameters:
+    model: qwen3-coder:30b
+    rate_limit: 120
+  sample_parameters:
+    max_tokens: 2048
+    seed: 42
+    temperature: 0.01
+openwebui/qwen3:32b:
+  custom_llm_provider: openwebui
+  model_metadata:
+    context_length: 0
+    description: ''
+    name: qwen3:32b
+    provider: openwebui
+  model_parameters:
+    model: qwen3:32b
+    rate_limit: 120
+  sample_parameters:
+    max_tokens: 2048
+    seed: 42
+    temperature: 0.01

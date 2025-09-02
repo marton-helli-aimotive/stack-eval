@@ -1,5 +1,4 @@
 import logging
-import os
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
@@ -12,21 +11,33 @@ from limits.strategies import MovingWindowRateLimiter
 from tqdm import tqdm
 
 from openrouter_client import openrouter_client
+from openwebui_client import openwebui_client
 
 with open("config/prompts.yml", "r") as file:
     PROMPTS = dict(yaml.safe_load(file))
 
-# Load models from OpenRouter (with caching)
+# Load models from providers (with caching)
+_llms_openrouter = {}
+_llms_openwebui = {}
+
 try:
-    LLMS = openrouter_client.get_available_models()
+    _llms_openrouter = openrouter_client.get_available_models()
 except Exception as e:
     logging.warning(f"Failed to load models from OpenRouter, using fallback: {e}")
-    # Fallback to original config if OpenRouter fails
     try:
         with open("config/llms.yml", "r") as file:
-            LLMS = dict(yaml.safe_load(file))
+            _llms_openrouter = dict(yaml.safe_load(file))
     except Exception:
-        LLMS = {}
+        _llms_openrouter = {}
+
+try:
+    _llms_openwebui = openwebui_client.get_available_models()
+except Exception as e:
+    logging.warning(f"Failed to load models from OpenWebUI: {e}")
+    _llms_openwebui = {}
+
+# Merge provider model maps. OpenWebUI keys are prefixed with 'openwebui/'.
+LLMS = {**_llms_openrouter, **_llms_openwebui}
 TASKS = {
     "stack-unseen": "data/stack-unseen-2.jsonl",
     "stack-eval": "data/stack-eval.jsonl",
@@ -215,19 +226,24 @@ def completion(
     if isinstance(messages[0], dict):
         messages = [messages]
 
-    # For OpenRouter, we use the model ID directly
+    # Select provider client and model id mapping
     if custom_llm_provider == "openrouter":
+        func = openrouter_client.chat_completion
+        model_id = model
+    elif custom_llm_provider == "openwebui":
+        func = openwebui_client.chat_completion
         model_id = model
     else:
-        # Fallback for other providers (if any)
+        # Unknown provider: try routing through OpenRouter with provider/model path
+        func = openrouter_client.chat_completion
         model_id = f"{custom_llm_provider}/{model}"
 
     func_args = [{"messages": m, "model": model_id, **kwargs} for m in messages]
     responses = batch_executor(
-        func=openrouter_client.chat_completion, func_args=func_args, rate=rate_limit, verbose=verbose,
+        func=func, func_args=func_args, rate=rate_limit, verbose=verbose,
     )
     
-    # OpenRouter returns strings directly, not litellm objects
+    # Providers return strings directly
     completions = [r if isinstance(r, str) else "" for r in responses]
 
     return completions[0] if len(completions) == 1 else completions

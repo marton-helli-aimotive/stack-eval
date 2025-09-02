@@ -1,7 +1,6 @@
 import streamlit as st
 import pandas as pd
 import json
-import random
 import yaml
 import os
 import glob
@@ -10,9 +9,11 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-from utils import setup_logger
+from utils import setup_logger  # noqa: E402
 
 logger = setup_logger(__name__)
+
+
 
 # Page configuration
 st.set_page_config(
@@ -23,19 +24,30 @@ st.set_page_config(
 )
 
 @st.cache_data
-def load_models_cache() -> Dict[str, Any]:
+def load_openrouter_models_cache() -> Dict[str, Any]:
     """
     Load the cached OpenRouter models from YAML file.
-    
-    Returns:
-        Dictionary containing model information
     """
     try:
         with open("config/openrouter_models_cache.yml", 'r', encoding='utf-8') as file:
             models = yaml.safe_load(file)
         return models
     except Exception as e:
-        logger.error(f"Error loading models cache: {e}")
+        logger.error(f"Error loading OpenRouter models cache: {e}")
+        return {}
+
+
+@st.cache_data
+def load_openwebui_models_cache() -> Dict[str, Any]:
+    """
+    Load the cached OpenWebUI models from YAML file.
+    """
+    try:
+        with open("config/openwebui_models_cache.yml", 'r', encoding='utf-8') as file:
+            models = yaml.safe_load(file)
+        return models
+    except Exception as e:
+        logger.error(f"Error loading OpenWebUI models cache: {e}")
         return {}
 
 @st.cache_data()
@@ -214,11 +226,12 @@ def main():
     st.title("💻 Coding Problems & Evaluation Dashboard")
     st.markdown("Filter and explore coding problems by type, complexity, and programming language, plus view live evaluation scores.")
     
-    # Load models cache
-    models_cache = load_models_cache()
+    # Load model caches
+    openrouter_models = load_openrouter_models_cache()
+    openwebui_models = load_openwebui_models_cache()
     
     # Top left controls for LLM selection and task
-    st.sidebar.header("🤖 Model & Task Selection")
+    st.sidebar.header("🎯 Model & Task Selection")
     
     # Task selector
     task_options = ["stack-eval", "stack-unseen"]
@@ -229,39 +242,66 @@ def main():
         help="Choose between stack-eval and stack-unseen tasks"
     )
     
-    # Get available models from cache
-    available_models = []
-    if models_cache:
-        for model_id, model_info in models_cache.items():
-            if model_id not in ['_cache_time', 'default', 'default-json']:
-                available_models.append(model_id)
+    # API selectors
+    api_options = ["OpenRouter", "OpenWebUI by aiMotive"]
     
-    # Sort models by ID for better UX
-    available_models.sort()
+    def get_models_for_api(api_name: str) -> List[str]:
+        cache = openrouter_models if api_name == "OpenRouter" else openwebui_models
+        models = []
+        if cache:
+            for model_id in cache.keys():
+                if model_id not in ['_cache_time', 'default', 'default-json']:
+                    models.append(model_id)
+        models.sort()
+        return models
     
-    # Model selectors - display just the identifier
-    if available_models:
-        selected_inferencer = st.sidebar.selectbox(
-            "Inferencer/Evaluatee Model",
-            options=available_models,
-            index=0 if available_models else None,
-            help="Select the model that generates solutions to be evaluated"
+    # Inferencer container
+    with st.sidebar.container():
+        st.markdown("**🧠 Inferencer**")
+        inferencer_api = st.selectbox(
+            "API",
+            options=api_options,
+            index=0,
+            help="Choose which API/provider to use for the inferencer"
         )
         
-        selected_judge = st.sidebar.selectbox(
-            "Judge/Evaluator Model",
-            options=available_models,
-            index=0 if available_models else None,
-            help="Select the model that evaluates the generated solutions"
+        inferencer_models = get_models_for_api(inferencer_api)
+        if inferencer_models:
+            inferencer_model = st.selectbox(
+                "Model",
+                options=inferencer_models,
+                index=0,
+                help="Select the model that generates solutions to be evaluated"
+            )
+        else:
+            st.warning(
+                "No models found for the selected Inferencer API. Ensure the respective cache YAML exists."
+            )
+            inferencer_model = None
+    
+    # Judge container
+    with st.sidebar.container():
+        st.markdown("**⚖️ Judge**")
+        judge_api = st.selectbox(
+            "API",
+            options=api_options,
+            index=0,
+            help="Choose which API/provider to use for the judge"
         )
         
-        # Use the selected models directly
-        inferencer_model = selected_inferencer
-        judge_model = selected_judge
-        
-        # Evaluation score will be calculated after filters are applied
-    else:
-        st.sidebar.warning("No models found in cache. Please check the openrouter_models_cache.yml file.")
+        judge_models = get_models_for_api(judge_api)
+        if judge_models:
+            judge_model = st.selectbox(
+                "Model",
+                options=judge_models,
+                index=0,
+                help="Select the model that evaluates the generated solutions"
+            )
+        else:
+            st.warning(
+                "No models found for the selected Judge API. Ensure the respective cache YAML exists."
+            )
+            judge_model = None
     
     # Main content tabs
     tab1, tab2 = st.tabs(["📋 Coding Problems", "🎲 Random Problem"])

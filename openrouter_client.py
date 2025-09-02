@@ -14,7 +14,7 @@ class OpenRouterClient:
     def __init__(self, api_key: Optional[str] = None):
         self.api_key = api_key or os.getenv("OPENROUTER_API_KEY")
         if not self.api_key:
-            raise ValueError("OpenRouter API key is required. Set OPENROUTER_API_KEY environment variable.")
+            logger.warning("OpenRouter API key missing. Set OPENROUTER_API_KEY to enable it.")
         
         self.base_url = "https://openrouter.ai/api/v1"
         self.models_cache_file = "config/openrouter_models_cache.yml"
@@ -47,6 +47,8 @@ class OpenRouterClient:
     
     def _fetch_models_from_api(self) -> Dict:
         """Fetch models from OpenRouter API"""
+        if not self.api_key:
+            raise ValueError("OPENROUTER_API_KEY is not set; cannot fetch models from API.")
         headers = {
             "Authorization": f"Bearer {self.api_key}",
             "Content-Type": "application/json"
@@ -171,6 +173,8 @@ class OpenRouterClient:
         Returns:
             Generated completion text
         """
+        if not self.api_key:
+            raise ValueError("OPENROUTER_API_KEY is not set; cannot perform chat completion.")
         headers = {
             "Authorization": f"Bearer {self.api_key}",
             "Content-Type": "application/json"

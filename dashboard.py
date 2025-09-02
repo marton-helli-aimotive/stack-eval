@@ -255,6 +255,20 @@ def main():
         models.sort()
         return models
     
+    def get_default_model_index(api_name: str, models: List[str]) -> int:
+        """Get the index of the preferred default model for the given API"""
+        if api_name == "OpenRouter":
+            # Prefer qwen/qwen3-coder:free if available
+            preferred = "qwen/qwen3-coder:free"
+        else:  # OpenWebUI
+            # Prefer openwebui/qwen3-coder:30b if available
+            preferred = "openwebui/qwen3-coder:30b"
+        
+        try:
+            return models.index(preferred)
+        except ValueError:
+            return 0  # Fallback to first model
+    
     # Inferencer container
     with st.sidebar.container():
         st.markdown("**🧠 Inferencer**")
@@ -270,7 +284,7 @@ def main():
             inferencer_model = st.selectbox(
                 "Model",
                 options=inferencer_models,
-                index=0,
+                index=get_default_model_index(inferencer_api, inferencer_models),
                 help="Select the model that generates solutions to be evaluated"
             )
         else:
@@ -294,7 +308,7 @@ def main():
             judge_model = st.selectbox(
                 "Model",
                 options=judge_models,
-                index=0,
+                index=get_default_model_index(judge_api, judge_models),
                 help="Select the model that evaluates the generated solutions"
             )
         else:

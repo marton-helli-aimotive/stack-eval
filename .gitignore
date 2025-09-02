@@ -4,4 +4,3 @@ google_auth.json
 output/
 venv/
 __pycache__/
-config/openrouter_models_cache.yml

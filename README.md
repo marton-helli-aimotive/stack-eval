@@ -40,19 +40,37 @@ A small sample of the LLM-as-a-Judge benchmark can be downloaded [here](./data/l
 - `Evaluation`: Human reasoning or the acceptance label.
 
 ### Inference & Evaluation
-We provide our inference and evaluation code along with the corresponding prompts. To run inference/evaluations, ensure that the API key for the model are defined in a `.env` file. Please refer to the list of llms in the [config file](./config/llms.yml) for available LLMs.
+We provide our inference and evaluation code along with the corresponding prompts. The system now uses **OpenRouter API** to dynamically fetch available models from multiple AI providers. To run inference/evaluations:
+
+1. **Set up OpenRouter API key** in your `.env` file (see [.env.example](.env.example))
+2. **Install dependencies**: `pip install -r requirements.txt`
+3. **Run inference/evaluation** using the model IDs from OpenRouter
+
+**Available Models**: The system automatically discovers models from providers like OpenAI, Anthropic, Google, Meta, Mistral, and many more. See [OpenRouter Integration Guide](OPENROUTER_README.md) for details.
 
 Inference can be run with the following command:
-```
+```bash
+# Using OpenRouter models (recommended)
+python3 inference.py -t stack-eval -m openai/gpt-4o
+python3 inference.py -t stack-unseen -m anthropic/claude-3-5-sonnet
+
+# Legacy models (if OpenRouter is unavailable)
 python3 inference.py -t stack-eval -m gpt-4-turbo-2024-04-09
-python3 inference.py -t TASK_TYPE -m MODEL_ID
 ```
+
 Evaluation can be run with the following command:
+```bash
+# Using OpenRouter models (recommended)
+python3 evaluation.py -t stack-eval -e openai/gpt-4o -j anthropic/claude-3-5-sonnet -p eval-cot-ref
+python3 evaluation.py -t stack-unseen -e openai/gpt-4o-mini -j openai/gpt-4o -p eval-cot-ref
+
+# Legacy models (if OpenRouter is unavailable)
+python3 evaluation.py -t stack-eval -e claude-3-5-sonnet -j gpt-4-turbo-2024-04-09 -p eval-cot-ref
 ```
-python3 evaluation.py -t stack-eval -e claude-3.5-sonnet -j gpt-4-turbo-2024-04-09 -p eval-cot-ref
-python3 evaluation.py -t TASK_TYPE -e EVALUATEE -j EVALUATOR -p PROMPT_NAME
-```
+
 This will generate scores for each question on a `0-3` scale. A completion is said to be acceptable, if it's score is greater than or equal to `2`.
+
+**Note**: Model names now use the format `provider/model-id` (e.g., `openai/gpt-4o`, `anthropic/claude-3-5-sonnet`).
 
 ### Dashboard
 We also provided a streamlit app to view and analyze the evaluation results, which can be launched with the following command:
@@ -60,6 +78,16 @@ We also provided a streamlit app to view and analyze the evaluation results, whi
 streamlit run dashboard.py
 ```
 Ensure that the `STACK_EVAL_DIR` and `STACK_UNSEEN_DIR` constants in [dashboard.py](./dashboard.py) are correctly pointed to the evaluation output directory, and at least one evaluation is present.
+
+### Testing OpenRouter Integration
+To verify that the OpenRouter integration is working correctly:
+```bash
+# Test model fetching and chat completion
+python3 test_openrouter.py
+
+# Refresh the models cache manually
+python3 refresh_models.py
+```
 
 ---
 

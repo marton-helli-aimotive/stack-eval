@@ -4,7 +4,6 @@ import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import json_repair
-import litellm
 import pandas as pd
 import yaml
 from limits import RateLimitItemPerMinute
@@ -12,12 +11,22 @@ from limits.storage import MemoryStorage
 from limits.strategies import MovingWindowRateLimiter
 from tqdm import tqdm
 
-litellm.drop_params = True
+from openrouter_client import openrouter_client
 
 with open("config/prompts.yml", "r") as file:
     PROMPTS = dict(yaml.safe_load(file))
-with open("config/llms.yml", "r") as file:
-    LLMS = dict(yaml.safe_load(file))
+
+# Load models from OpenRouter (with caching)
+try:
+    LLMS = openrouter_client.get_available_models()
+except Exception as e:
+    logging.warning(f"Failed to load models from OpenRouter, using fallback: {e}")
+    # Fallback to original config if OpenRouter fails
+    try:
+        with open("config/llms.yml", "r") as file:
+            LLMS = dict(yaml.safe_load(file))
+    except Exception:
+        LLMS = {}
 TASKS = {
     "stack-unseen": "data/stack-unseen-2.jsonl",
     "stack-eval": "data/stack-eval.jsonl",
@@ -191,7 +200,7 @@ def completion(
     **kwargs,
 ) -> str:
     """
-    Generate completions for a list of messages using the specified language model.
+    Generate completions for a list of messages using OpenRouter API.
 
     Args:
         messages (list[list[dict]] | list[dict]): A list of messages to generate completions for.
@@ -206,22 +215,20 @@ def completion(
     if isinstance(messages[0], dict):
         messages = [messages]
 
-    model = f"{custom_llm_provider}/{model}"
-    if "api_key" in kwargs:
-        kwargs["api_key"] = os.getenv(kwargs["api_key"])
-    if "api_base" in kwargs:
-        kwargs["api_base"] = os.getenv(kwargs["api_base"])
-    if "organization" in kwargs:
-        kwargs["organization"] = os.getenv(kwargs["organization"])
+    # For OpenRouter, we use the model ID directly
+    if custom_llm_provider == "openrouter":
+        model_id = model
+    else:
+        # Fallback for other providers (if any)
+        model_id = f"{custom_llm_provider}/{model}"
 
-    func_args = [{"messages": m, "model": model, **kwargs} for m in messages]
+    func_args = [{"messages": m, "model": model_id, **kwargs} for m in messages]
     responses = batch_executor(
-        func=litellm.completion, func_args=func_args, rate=rate_limit, verbose=verbose,
+        func=openrouter_client.chat_completion, func_args=func_args, rate=rate_limit, verbose=verbose,
     )
-    completions = [
-        r.choices[0].message.content if isinstance(r, litellm.ModelResponse) else ""
-        for r in responses
-    ]
+    
+    # OpenRouter returns strings directly, not litellm objects
+    completions = [r if isinstance(r, str) else "" for r in responses]
 
     return completions[0] if len(completions) == 1 else completions
 

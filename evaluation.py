@@ -82,6 +82,8 @@ def main(task: str,
         return
 
     run_df = evaluatee_data[evaluatee_data["questionId"].astype(str).isin(to_run_ids)] if to_run_ids else evaluatee_data
+    # Ensure a clean, continuous index for safe concatenation later
+    run_df = run_df.reset_index(drop=True)
 
     messages = batch_format_prompt(PROMPTS[prompt_name], run_df)
     logger.info("Loaded %s messages for evaluation on task %s (selected=%d, remaining=%d).",
@@ -100,13 +102,23 @@ def main(task: str,
         num_retries=3, timeout=request_timeout
     )
     parsed_completions = batch_parse_json(completions, expected_keys=prompt["output"])
-    parsed_completions_df = pd.DataFrame(parsed_completions)
+    parsed_completions_df = pd.DataFrame(parsed_completions).reset_index(drop=True)
+
+    # Guard against any unexpected length mismatch by aligning to run_df length
+    if len(parsed_completions_df) != len(run_df):
+        logger.warning(
+            "Parsed completions length (%d) does not match run_df length (%d). Aligning and trimming extras.",
+            len(parsed_completions_df), len(run_df)
+        )
+        parsed_completions_df = parsed_completions_df.reindex(range(len(run_df))).reset_index(drop=True)
 
     empty_evaluations = parsed_completions_df.isna().any(axis=1).sum()
     if empty_evaluations > 0:
         logger.warning("Empty evaluations found: %s.", empty_evaluations)
         parsed_completions_df = _fillna(parsed_completions_df)
     run_df = pd.concat([run_df, parsed_completions_df], axis=1)
+    # Drop any rows that somehow lost their questionId during alignment
+    run_df = run_df.dropna(subset=["questionId"]).reset_index(drop=True)
 
     os.makedirs(os.path.dirname(output_path), exist_ok=True)
     if os.path.exists(output_path):

@@ -1,10 +1,16 @@
+import os
+from dotenv import load_dotenv
+
+# Load environment variables from .env file
+load_dotenv()
+
 import streamlit as st
 import pandas as pd
 import glob
 from utils import setup_logger
 
-STACK_EVAL_DIR = "output/stack-eval/evl/gpt-4-turbo-2024-04-09/eval-cot-ref"
-STACK_UNSEEN_DIR = "output/stack-unseen/evl/gpt-4-turbo-2024-04-09/eval-cot-ref"
+STACK_EVAL_DIR = "output/stack-eval/evl/openai/gpt-4o/eval-cot-ref"
+STACK_UNSEEN_DIR = "output/stack-unseen/evl/gpt-4o/eval-cot-ref"
 logger = setup_logger("dashboard")
 
 st.set_page_config(layout="wide")
@@ -17,15 +23,20 @@ def load_data(path: str):
     @param path: The path to the evaluation data.
     @return: The loaded evaluation data.
     """
-    files = glob.glob(f"{path}/*.jsonl")
+    # Search recursively for .jsonl files in subdirectories
+    files = glob.glob(f"{path}/**/*.jsonl", recursive=True)
     evals = []
     for file in files:
-        df = pd.read_json(file, lines=True)[['questionId', 'questionMetadata', 'model', 'modelMetadata', 'acceptabilityScore']]
-        df['acceptance'] = (df['acceptabilityScore'] >= 2).astype(int)
-        questionMetadata = pd.json_normalize(df['questionMetadata'])
-        modelMetadata = pd.json_normalize(df['modelMetadata'])
-        df = pd.concat([df, questionMetadata, modelMetadata], axis=1).drop(['questionMetadata', 'modelMetadata', 'acceptabilityScore'], axis=1)
-        evals.append(df)
+        try:
+            df = pd.read_json(file, lines=True)[['questionId', 'questionMetadata', 'model', 'modelMetadata', 'acceptabilityScore']]
+            df['acceptance'] = (df['acceptabilityScore'] >= 2).astype(int)
+            questionMetadata = pd.json_normalize(df['questionMetadata'])
+            modelMetadata = pd.json_normalize(df['modelMetadata'])
+            df = pd.concat([df, questionMetadata, modelMetadata], axis=1).drop(['questionMetadata', 'modelMetadata', 'acceptabilityScore'], axis=1)
+            evals.append(df)
+        except Exception as e:
+            logger.warning(f"Error loading file {file}: {e}")
+            continue
     if len(evals) == 0:
         logger.warning("No evaluation data found in %s.", path)
         return pd.DataFrame()
@@ -69,7 +80,7 @@ def render_tab(df: pd.DataFrame, type_key: str, level_key: str, tag_key: str):
     if types and levels and tags:
         filtered_df = get_filtered_leaderboard(df, types, levels, tags)
         # Make the leaderboard take up necessary height: https://discuss.streamlit.io/t/st-dataframe-controlling-the-height-threshold-for-scolling/31769/4
-        st.dataframe(filtered_df, use_container_width=True, height=(len(filtered_df) + 1) * 35 + 3)
+        st.dataframe(filtered_df, width="stretch", height=(len(filtered_df) + 1) * 35 + 3)
     else:
         st.warning("Please select at least one type, level, and tag.")
 

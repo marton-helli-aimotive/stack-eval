@@ -3,6 +3,13 @@ import pandas as pd
 import json
 import random
 from typing import List, Dict, Any
+from dotenv import load_dotenv
+
+load_dotenv()
+
+from utils import setup_logger
+
+logger = setup_logger(__name__)
 
 # Page configuration
 st.set_page_config(
@@ -131,82 +138,44 @@ def main():
     st.sidebar.markdown(f"**Filtered Problems:** {len(filtered_df)}")
     
     # Main content area
-    col1, col2 = st.columns([2, 1])
+    st.header("📊 Problem Statistics")
     
-    with col1:
-        st.header("📊 Problem Statistics")
-        
-        # Display statistics
-        col_stats1, col_stats2, col_stats3 = st.columns(3)
-        
-        with col_stats1:
-            st.metric("Total Problems", len(df))
-        
-        with col_stats2:
-            st.metric("Filtered Problems", len(filtered_df))
-        
-        with col_stats3:
-            if len(filtered_df) > 0:
-                percentage = (len(filtered_df) / len(df)) * 100
-                st.metric("Filter Coverage", f"{percentage:.1f}%")
-            else:
-                st.metric("Filter Coverage", "0%")
-        
-        # Distribution charts
-        if len(filtered_df) > 0:
-            st.subheader("📈 Distribution by Category")
-            
-            col_chart1, col_chart2 = st.columns(2)
-            
-            with col_chart1:
-                type_counts = filtered_df['type'].value_counts()
-                st.bar_chart(type_counts)
-                st.caption("Distribution by Question Type")
-            
-            with col_chart2:
-                level_counts = filtered_df['level'].value_counts()
-                st.bar_chart(level_counts)
-                st.caption("Distribution by Complexity Level")
-            
-            # Programming language distribution
-            st.subheader("🔤 Programming Language Distribution")
-            lang_counts = filtered_df['tag'].value_counts()
-            st.bar_chart(lang_counts)
+    # Display statistics
+    col_stats1, col_stats2, col_stats3 = st.columns(3)
     
-    with col2:
-        st.header("🎲 Random Problem")
-        
+    with col_stats1:
+        st.metric("Total Problems", len(df))
+    
+    with col_stats2:
+        st.metric("Filtered Problems", len(filtered_df))
+    
+    with col_stats3:
         if len(filtered_df) > 0:
-            if st.button("🎯 Pick Random Problem", type="primary"):
-                random_problem = filtered_df.sample(n=1).iloc[0]
-                st.session_state.random_problem = random_problem
-            
-            # Display random problem if available
-            if 'random_problem' in st.session_state:
-                problem = st.session_state.random_problem
-                st.markdown("**Selected Problem:**")
-                st.info(f"**{problem['type'].title()}** - **{problem['level'].title()}** - **{problem['tag'].title()}**")
-                
-                # Show question preview
-                question_preview = problem['question'][:200] + "..." if len(problem['question']) > 200 else problem['question']
-                st.text_area("Question Preview:", question_preview, height=100, disabled=True)
-                
-                if st.button("👁️ View Full Problem"):
-                    st.session_state.show_full_problem = True
+            percentage = (len(filtered_df) / len(df)) * 100
+            st.metric("Filter Coverage", f"{percentage:.1f}%")
         else:
-            st.warning("No problems match the current filters.")
+            st.metric("Filter Coverage", "0%")
     
-    # Full problem display
-    if 'show_full_problem' in st.session_state and st.session_state.show_full_problem:
-        if 'random_problem' in st.session_state:
-            problem = st.session_state.random_problem
-            st.markdown("---")
-            st.markdown("## 📖 Full Problem Display")
-            st.markdown(format_problem_display(problem))
-            
-            if st.button("❌ Close Full View"):
-                st.session_state.show_full_problem = False
-                st.rerun()
+    # Distribution charts
+    if len(filtered_df) > 0:
+        st.subheader("📈 Distribution by Category")
+        
+        col_chart1, col_chart2 = st.columns(2)
+        
+        with col_chart1:
+            type_counts = filtered_df['type'].value_counts()
+            st.bar_chart(type_counts)
+            st.caption("Distribution by Question Type")
+        
+        with col_chart2:
+            level_counts = filtered_df['level'].value_counts()
+            st.bar_chart(level_counts)
+            st.caption("Distribution by Complexity Level")
+        
+        # Programming language distribution
+        st.subheader("🔤 Programming Language Distribution")
+        lang_counts = filtered_df['tag'].value_counts()
+        st.bar_chart(lang_counts)
     
     # Problem list
     st.header("📋 Problem List")
@@ -228,7 +197,7 @@ def main():
         # Display problems in a table
         st.dataframe(
             display_df[['questionId', 'type', 'level', 'tag', 'question']].head(50),
-            use_container_width=True,
+            width="stretch",
             column_config={
                 'questionId': st.column_config.TextColumn('ID', width=100),
                 'type': st.column_config.TextColumn('Type', width=80),
@@ -242,6 +211,42 @@ def main():
             st.info(f"Showing first 50 of {len(display_df)} problems. Use search to find specific problems.")
     else:
         st.info("No problems match the current filters. Try adjusting your filter criteria.")
+    
+    # Random Problem section
+    st.markdown("---")
+    st.header("🎲 Random Problem")
+    
+    if len(filtered_df) > 0:
+        if st.button("🎯 Pick Random Problem", type="primary"):
+            random_problem = filtered_df.sample(n=1).iloc[0]
+            st.session_state.random_problem = random_problem
+        
+        # Display random problem if available
+        if 'random_problem' in st.session_state:
+            problem = st.session_state.random_problem
+            st.markdown("**Selected Problem:**")
+            st.info(f"**{problem['type'].title()}** - **{problem['level'].title()}** - **{problem['tag'].title()}**")
+            
+            # Show question preview
+            question_preview = problem['question'][:200] + "..." if len(problem['question']) > 200 else problem['question']
+            st.text_area("Question Preview:", question_preview, height=100, disabled=True)
+            
+            if st.button("👁️ View Full Problem"):
+                st.session_state.show_full_problem = True
+    else:
+        st.warning("No problems match the current filters.")
+    
+    # Full problem display
+    if 'show_full_problem' in st.session_state and st.session_state.show_full_problem:
+        if 'random_problem' in st.session_state:
+            problem = st.session_state.random_problem
+            st.markdown("---")
+            st.markdown("## 📖 Full Problem Display")
+            st.markdown(format_problem_display(problem))
+            
+            if st.button("❌ Close Full View"):
+                st.session_state.show_full_problem = False
+                st.rerun()
     
     # Footer
     st.markdown("---")

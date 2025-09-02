@@ -261,10 +261,12 @@ def setup_logger(name: str):
         logging.Logger: The configured logger object.
     """
     logger = logging.getLogger(name)
-    handler = logging.StreamHandler()
-    formatter = logging.Formatter("%(name)s - %(levelname)s - %(message)s")
-    handler.setFormatter(formatter)
-    logger.addHandler(handler)
+    # Prevent duplicate handlers on Streamlit reruns
+    if not any(isinstance(h, logging.StreamHandler) for h in logger.handlers):
+        handler = logging.StreamHandler()
+        formatter = logging.Formatter("%(name)s - %(levelname)s - %(message)s")
+        handler.setFormatter(formatter)
+        logger.addHandler(handler)
     logger.setLevel(logging.INFO)
 
     return logger

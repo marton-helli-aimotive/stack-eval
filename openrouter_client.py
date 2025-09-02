@@ -23,6 +23,26 @@ class OpenRouterClient:
             self.request_timeout = float(os.getenv("LLM_REQUEST_TIMEOUT", "120"))
         except Exception:
             self.request_timeout = 120.0
+
+        # Optional but recommended headers per OpenRouter guidance
+        # See https://openrouter.ai/docs for details
+        self.app_title = os.getenv("OPENROUTER_APP_TITLE", "Stack Eval Dashboard")
+        self.http_referer = (
+            os.getenv("OPENROUTER_HTTP_REFERER")
+            or os.getenv("SITE_URL")
+            or os.getenv("STREAMLIT_SERVER_URL")
+            or "http://localhost"
+        )
+
+    def _build_headers(self) -> Dict[str, str]:
+        headers: Dict[str, str] = {
+            "Authorization": f"Bearer {self.api_key}",
+            "Content-Type": "application/json",
+            "Accept": "application/json",
+            "HTTP-Referer": self.http_referer,
+            "X-Title": self.app_title,
+        }
+        return headers
         
     def get_available_models(self, force_refresh: bool = False) -> Dict:
         """
@@ -53,15 +73,12 @@ class OpenRouterClient:
         """Fetch models from OpenRouter API"""
         if not self.api_key:
             raise ValueError("OPENROUTER_API_KEY is not set; cannot fetch models from API.")
-        headers = {
-            "Authorization": f"Bearer {self.api_key}",
-            "Content-Type": "application/json"
-        }
+        headers = self._build_headers()
         
         response = requests.get(
             f"{self.base_url}/models",
             headers=headers,
-            timeout=self.request_timeout
+            timeout=self.request_timeout,
         )
         response.raise_for_status()
         
@@ -179,10 +196,7 @@ class OpenRouterClient:
         """
         if not self.api_key:
             raise ValueError("OPENROUTER_API_KEY is not set; cannot perform chat completion.")
-        headers = {
-            "Authorization": f"Bearer {self.api_key}",
-            "Content-Type": "application/json"
-        }
+        headers = self._build_headers()
         
         data = {
             "model": model,
@@ -191,17 +205,28 @@ class OpenRouterClient:
         }
         
         try:
+            timeout_value = float(kwargs.pop("timeout", self.request_timeout))
             response = requests.post(
                 f"{self.base_url}/chat/completions",
                 headers=headers,
-                data=json.dumps(data),
-                timeout=float(kwargs.pop("timeout", self.request_timeout))
+                json=data,
+                timeout=timeout_value,
             )
             response.raise_for_status()
             
             result = response.json()
             return result["choices"][0]["message"]["content"]
             
+        except requests.exceptions.HTTPError as e:
+            # Try to include error payload for easier debugging
+            try:
+                err_json = e.response.json()
+                err_msg = err_json.get("error") or err_json.get("message") or err_json
+            except Exception:
+                err_msg = getattr(e.response, "text", str(e))
+            status = getattr(e.response, "status_code", "?")
+            logger.error(f"OpenRouter API HTTP {status}: {err_msg}")
+            raise
         except requests.exceptions.RequestException as e:
             logger.error(f"OpenRouter API request failed: {e}")
             raise

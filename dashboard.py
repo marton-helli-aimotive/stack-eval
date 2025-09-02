@@ -54,7 +54,7 @@ def load_openwebui_models_cache() -> Dict[str, Any]:
         logger.error(f"Error loading OpenWebUI models cache: {e}")
         return {}
 
-@st.cache_data()
+@st.cache_data(ttl=5)
 def load_evaluation_data(path: str) -> pd.DataFrame:
     """
     Load the evaluation data from the given path.
@@ -92,14 +92,24 @@ def load_evaluation_data(path: str) -> pd.DataFrame:
             df = df.drop(['questionMetadata', 'modelMetadata', 'acceptabilityScore'], axis=1)
             evals.append(df)
         except Exception as e:
-            logger.warning(f"Error loading file {file}: {e}")
+            # During active runs files may be incomplete; avoid spamming warnings
+            if st.session_state.get("is_running", False):
+                logger.debug(f"Error loading file {file}: {e}")
+            else:
+                logger.warning(f"Error loading file {file}: {e}")
             continue
     
     if len(evals) == 0:
-        logger.warning("No evaluation data found in %s.", path)
+        if st.session_state.get("is_running", False):
+            logger.debug("No evaluation data found in %s.", path)
+        else:
+            logger.warning("No evaluation data found in %s.", path)
         return pd.DataFrame()
     
-    logger.info("Loaded %s evaluation data from %s.", len(evals), path)
+    if st.session_state.get("is_running", False):
+        logger.debug("Loaded %s evaluation data from %s.", len(evals), path)
+    else:
+        logger.info("Loaded %s evaluation data from %s.", len(evals), path)
     return pd.concat(evals).reset_index(drop=True)
 
 
@@ -232,27 +242,107 @@ def _evaluation_output_path(task: str, inferencer_model: str, judge_model: str, 
     return f"output/{task}/evl/{judge_model}/{prompt_name}/{inferencer_model}.jsonl"
 
 def main():
-    st.title("💻 Coding Problems & Evaluation Dashboard")
+    st.title("Coding Problems & Evaluation Dashboard")
     st.markdown("Filter and explore coding problems by type, complexity, and programming language, plus view live evaluation scores.")
     if "is_running" not in st.session_state:
         st.session_state["is_running"] = False
+    # Top-of-page status notice while long-running tasks execute
+    top_notice = st.empty()
+    if st.session_state.get("is_running", False):
+        top_notice.info("⏳ Inference/Evaluation is running. Check the terminal for detailed progress logs.")
     
     # Load model caches
     openrouter_models = load_openrouter_models_cache()
     openwebui_models = load_openwebui_models_cache()
     
     # Top left controls for LLM selection and task
-    st.sidebar.header("🎯 Model & Task Selection")
+    st.sidebar.header("🎯 Task Selection")
     
     # Task selector
     task_options = ["stack-eval-mini", "stack-eval", "stack-unseen"]
     selected_task = st.sidebar.selectbox(
-        "Select Task",
+        "Select Dataset",
         options=task_options,
-        index=0,
+        index=task_options.index("stack-eval"),
         help="Choose between stack-eval and stack-unseen tasks",
         disabled=st.session_state.get("is_running", False)
     )
+    # Clear any previously selected random problem when task changes
+    if "prev_selected_task" not in st.session_state:
+        st.session_state["prev_selected_task"] = selected_task
+    elif st.session_state["prev_selected_task"] != selected_task:
+        st.session_state["prev_selected_task"] = selected_task
+        if "random_problem" in st.session_state:
+            del st.session_state["random_problem"]
+        if "show_full_problem" in st.session_state:
+            st.session_state["show_full_problem"] = False
+    
+    # Load coding problems data based on selected task (needed for filters)
+    if selected_task == "stack-eval":
+        data_files = ["data/stack-eval.jsonl"]
+    elif selected_task == "stack-eval-mini":
+        data_files = ["data/stack-eval-mini.jsonl"]
+    else:  # stack-unseen
+        data_files = sorted(glob.glob("data/stack-unseen*.jsonl"))
+
+    dfs = []
+    for path in data_files:
+        if os.path.exists(path):
+            part = load_coding_problems(path)
+            if not part.empty:
+                dfs.append(part)
+    df = pd.concat(dfs).reset_index(drop=True) if len(dfs) > 0 else pd.DataFrame()
+    
+    if df.empty:
+        st.error("No coding problems data loaded. Please check the file path.")
+        return
+    
+    # Problem filters directly under Task selection
+    st.sidebar.header("🔍 Filters")
+    
+    # Question type filter
+    task_types = sorted(df['type'].unique())
+    selected_types = st.sidebar.multiselect(
+        "Task Type",
+        options=task_types,
+        default=task_types,
+        help="Select one or more question types to filter by",
+        disabled=st.session_state.get("is_running", False)
+    )
+    
+    # Complexity level filter
+    complexity_levels = sorted(df['level'].unique())
+    selected_levels = st.sidebar.multiselect(
+        "Complexity Level",
+        options=complexity_levels,
+        default=complexity_levels,
+        help="Select one or more complexity levels to filter by",
+        disabled=st.session_state.get("is_running", False)
+    )
+    
+    # Programming language filter
+    programming_languages = sorted(df['tag'].unique())
+    selected_languages = st.sidebar.multiselect(
+        "Programming Language",
+        options=programming_languages,
+        default=programming_languages,
+        help="Select one or more programming languages to filter by",
+        disabled=st.session_state.get("is_running", False)
+    )
+    
+    # Apply filters
+    if selected_types and selected_levels and selected_languages:
+        filtered_df = df[
+            (df['type'].isin(selected_types)) &
+            (df['level'].isin(selected_levels)) &
+            (df['tag'].isin(selected_languages))
+        ]
+    else:
+        filtered_df = df
+    
+    # Separator before model selection
+    st.sidebar.markdown("---")
+    st.sidebar.header("⚙️ Model Selection")
     
     # API selectors
     api_options = ["OpenRouter", "OpenWebUI by aiMotive"]
@@ -287,7 +377,7 @@ def main():
     
     # Inferencer container
     with st.sidebar.container():
-        st.markdown("**🧠 Inferencer**")
+        st.markdown("**🧠 Solver**")
         inferencer_api = st.selectbox(
             "API",
             options=api_options,
@@ -340,102 +430,47 @@ def main():
     # Main content tabs
     tab1, tab2 = st.tabs(["📋 Coding Problems", "🎲 Random Problem"])
     
-    # Load coding problems data
-    data_file = "data/stack-eval.jsonl"
-    df = load_coding_problems(data_file)
-    
-    if df.empty:
-        st.error("No coding problems data loaded. Please check the file path.")
-        return
-    
-    # Sidebar filters for coding problems
-    st.sidebar.header("🔍 Problem Filters")
-    
-    # Question type filter
-    question_types = sorted(df['type'].unique())
-    selected_types = st.sidebar.multiselect(
-        "Question Type",
-        options=question_types,
-        default=question_types,
-        help="Select one or more question types to filter by",
-        disabled=st.session_state.get("is_running", False)
-    )
-    
-    # Complexity level filter
-    complexity_levels = sorted(df['level'].unique())
-    selected_levels = st.sidebar.multiselect(
-        "Complexity Level",
-        options=complexity_levels,
-        default=complexity_levels,
-        help="Select one or more complexity levels to filter by",
-        disabled=st.session_state.get("is_running", False)
-    )
-    
-    # Programming language filter
-    programming_languages = sorted(df['tag'].unique())
-    selected_languages = st.sidebar.multiselect(
-        "Programming Language",
-        options=programming_languages,
-        default=programming_languages,
-        help="Select one or more programming languages to filter by",
-        disabled=st.session_state.get("is_running", False)
-    )
-    
-    # Apply filters
-    if selected_types and selected_levels and selected_languages:
-        filtered_df = df[
-            (df['type'].isin(selected_types)) &
-            (df['level'].isin(selected_levels)) &
-            (df['tag'].isin(selected_languages))
-        ]
-    else:
-        filtered_df = df
-    
-    # Display filter summary
-    st.sidebar.markdown("---")
-    st.sidebar.markdown(f"**Total Problems:** {len(df)}")
-    st.sidebar.markdown(f"**Filtered Problems:** {len(filtered_df)}")
-    
     # Tab 1: Coding Problems
     with tab1:                
-        # Live Evaluation Score (updated with filters)
+        # Live status and evaluation (updated with filters)
+        # First, check inference existence independently of judge selection
+        inference_exists = False
+        if inferencer_model:
+            inference_exists = os.path.exists(_inference_output_path(selected_task, inferencer_model))
+            if not inference_exists:
+                st.warning(f"No inference results found for the selected combination: {selected_task}, {inferencer_model}.")
+
+        # Then, if a judge is selected and inference exists, show evaluation metrics/warnings
         if inferencer_model and judge_model:
             st.subheader("📊 Live Evaluation Score")
-            
-            # Get evaluation score with current filters
-            evaluation_score = get_evaluation_score(
-                selected_task, inferencer_model, judge_model,
-                selected_types, selected_levels, selected_languages
-            )
-            # Check filesystem for existing outputs
-            inference_exists = os.path.exists(_inference_output_path(selected_task, inferencer_model))
-            # evaluation_exists not needed directly; rely on evaluation_score['data_loaded']
-            
-            if evaluation_score['data_loaded']:
-                col1, col2, col3, col4 = st.columns(4)
-                
-                with col1:
-                    st.metric("Task", selected_task.replace("-", " ").title())
-                
-                with col2:
-                    st.metric("Total Questions", evaluation_score['total_questions'])
-                
-                with col3:
-                    st.metric("Accepted Solutions", evaluation_score['accepted_questions'])
-                
-                with col4:
-                    st.metric("Acceptance Rate", f"{evaluation_score['acceptance_rate']:.1f}%")
-                
-                # Show the path being used
-                st.info(f"📁 Data loaded from: `output/{selected_task}/evl/{judge_model}/eval-cot-ref/{inferencer_model}.jsonl`")
-                
-            else:
-                if not inference_exists:
-                    st.warning(f"No inference results found for the selected combination: {selected_task}, {inferencer_model}.")
+            if inference_exists:
+                st.success("Inference results ready")
+                # Get evaluation score with current filters
+                evaluation_score = get_evaluation_score(
+                    selected_task, inferencer_model, judge_model,
+                    selected_types, selected_levels, selected_languages
+                )
+
+                if evaluation_score['data_loaded']:
+                    st.success("Evaluation results ready")
+                    col1, col2, col3, col4 = st.columns(4)
+                    
+                    with col1:
+                        st.metric("Task", selected_task.replace("-", " ").title())
+                    
+                    with col2:
+                        st.metric("Total Questions", evaluation_score['total_questions'])
+                    
+                    with col3:
+                        st.metric("Accepted Solutions", evaluation_score['accepted_questions'])
+                    
+                    with col4:
+                        st.metric("Acceptance Rate", f"{evaluation_score['acceptance_rate']:.1f}%")
                 else:
                     st.warning(f"No evaluation data found for the selected combination: {selected_task}, {inferencer_model} and {judge_model}.")
-
-            # Action buttons for running inference/evaluation
+            # If inference does not exist, we've already shown the inference warning above; don't show evaluation warning.
+        
+        # Action buttons for running inference/evaluation
             st.markdown("---")
             col_run1, col_run2 = st.columns(2)
             with col_run1:
@@ -444,11 +479,12 @@ def main():
                     or inferencer_model is None
                     or os.path.exists(_inference_output_path(selected_task, inferencer_model))
                 )
-                if st.button("🚀 Run inference", disabled=run_inf_disabled):
+                if st.button("🧠 Solve tasks", disabled=run_inf_disabled):
                     try:
                         st.session_state["is_running"] = True
                         # Call directly so logs appear in the terminal running Streamlit
-                        inference_module.main(selected_task, inferencer_model)
+                        with st.spinner("Running inference... check the terminal for detailed progress."):
+                            inference_module.main(selected_task, inferencer_model)
                     except Exception as e:
                         st.error(f"Inference failed: {e}")
                     finally:
@@ -462,11 +498,12 @@ def main():
                     or not os.path.exists(_inference_output_path(selected_task, inferencer_model))
                     or os.path.exists(_evaluation_output_path(selected_task, inferencer_model, judge_model))
                 )
-                if st.button("🧪 Evaluate inferencer", disabled=run_eval_disabled):
+                if st.button("⚖️ Judge solutions", disabled=run_eval_disabled):
                     try:
                         st.session_state["is_running"] = True
                         # Use default prompt name used across the app
-                        evaluation_module.main(selected_task, "eval-cot-ref", inferencer_model, judge_model)
+                        with st.spinner("Running evaluation... check the terminal for detailed progress."):
+                            evaluation_module.main(selected_task, "eval-cot-ref", inferencer_model, judge_model)
                     except Exception as e:
                         st.error(f"Evaluation failed: {e}")
                     finally:

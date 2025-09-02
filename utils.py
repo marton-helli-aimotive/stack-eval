@@ -39,6 +39,7 @@ except Exception as e:
 # Merge provider model maps. OpenWebUI keys are prefixed with 'openwebui/'.
 LLMS = {**_llms_openrouter, **_llms_openwebui}
 TASKS = {
+    "stack-eval-mini": "data/stack-eval-mini.jsonl",
     "stack-unseen": "data/stack-unseen-2.jsonl",
     "stack-eval": "data/stack-eval.jsonl",
 }

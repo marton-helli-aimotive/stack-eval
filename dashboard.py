@@ -7,6 +7,10 @@ import glob
 from typing import List, Dict, Any
 from dotenv import load_dotenv
 
+# Import modules so their logs print to the original terminal when called directly
+import inference as inference_module
+import evaluation as evaluation_module
+
 load_dotenv()
 
 from utils import setup_logger  # noqa: E402
@@ -180,10 +184,7 @@ def get_evaluation_score(task: str, inferencer_model: str, judge_model: str,
     """
     # Construct the expected path based on the actual file structure
     # Path format: output/{task}/evl/{judge_model}/eval-cot-ref/{inferencer_model}.jsonl
-    if task == "stack-eval":
-        base_path = f"output/stack-eval/evl/{judge_model}/eval-cot-ref/{inferencer_model}.jsonl"
-    else:  # stack-unseen
-        base_path = f"output/stack-unseen/evl/{judge_model}/eval-cot-ref/{inferencer_model}.jsonl"
+    base_path = _evaluation_output_path(task, inferencer_model, judge_model)
     
     # Try to load evaluation data
     try:
@@ -222,9 +223,19 @@ def get_evaluation_score(task: str, inferencer_model: str, judge_model: str,
         'filtered': False
     }
 
+
+def _inference_output_path(task: str, inferencer_model: str) -> str:
+    return f"output/{task}/inf/{inferencer_model}.jsonl"
+
+
+def _evaluation_output_path(task: str, inferencer_model: str, judge_model: str, prompt_name: str = "eval-cot-ref") -> str:
+    return f"output/{task}/evl/{judge_model}/{prompt_name}/{inferencer_model}.jsonl"
+
 def main():
     st.title("💻 Coding Problems & Evaluation Dashboard")
     st.markdown("Filter and explore coding problems by type, complexity, and programming language, plus view live evaluation scores.")
+    if "is_running" not in st.session_state:
+        st.session_state["is_running"] = False
     
     # Load model caches
     openrouter_models = load_openrouter_models_cache()
@@ -234,16 +245,21 @@ def main():
     st.sidebar.header("🎯 Model & Task Selection")
     
     # Task selector
-    task_options = ["stack-eval", "stack-unseen"]
+    task_options = ["stack-eval-mini", "stack-eval", "stack-unseen"]
     selected_task = st.sidebar.selectbox(
         "Select Task",
         options=task_options,
         index=0,
-        help="Choose between stack-eval and stack-unseen tasks"
+        help="Choose between stack-eval and stack-unseen tasks",
+        disabled=st.session_state.get("is_running", False)
     )
     
     # API selectors
     api_options = ["OpenRouter", "OpenWebUI by aiMotive"]
+
+    def get_default_api_index() -> int:
+        # Prefer OpenWebUI by default to avoid external dependency pitfalls
+        return 1 if len(api_options) > 1 else 0
     
     def get_models_for_api(api_name: str) -> List[str]:
         cache = openrouter_models if api_name == "OpenRouter" else openwebui_models
@@ -275,8 +291,9 @@ def main():
         inferencer_api = st.selectbox(
             "API",
             options=api_options,
-            index=0,
-            help="Choose which API/provider to use for the inferencer"
+            index=get_default_api_index(),
+            help="Choose which API/provider to use for the inferencer",
+            disabled=st.session_state.get("is_running", False)
         )
         
         inferencer_models = get_models_for_api(inferencer_api)
@@ -285,7 +302,8 @@ def main():
                 "Model",
                 options=inferencer_models,
                 index=get_default_model_index(inferencer_api, inferencer_models),
-                help="Select the model that generates solutions to be evaluated"
+                help="Select the model that generates solutions to be evaluated",
+                disabled=st.session_state.get("is_running", False)
             )
         else:
             st.warning(
@@ -299,8 +317,9 @@ def main():
         judge_api = st.selectbox(
             "API",
             options=api_options,
-            index=0,
-            help="Choose which API/provider to use for the judge"
+            index=get_default_api_index(),
+            help="Choose which API/provider to use for the judge",
+            disabled=st.session_state.get("is_running", False)
         )
         
         judge_models = get_models_for_api(judge_api)
@@ -309,7 +328,8 @@ def main():
                 "Model",
                 options=judge_models,
                 index=get_default_model_index(judge_api, judge_models),
-                help="Select the model that evaluates the generated solutions"
+                help="Select the model that evaluates the generated solutions",
+                disabled=st.session_state.get("is_running", False)
             )
         else:
             st.warning(
@@ -337,7 +357,8 @@ def main():
         "Question Type",
         options=question_types,
         default=question_types,
-        help="Select one or more question types to filter by"
+        help="Select one or more question types to filter by",
+        disabled=st.session_state.get("is_running", False)
     )
     
     # Complexity level filter
@@ -346,7 +367,8 @@ def main():
         "Complexity Level",
         options=complexity_levels,
         default=complexity_levels,
-        help="Select one or more complexity levels to filter by"
+        help="Select one or more complexity levels to filter by",
+        disabled=st.session_state.get("is_running", False)
     )
     
     # Programming language filter
@@ -355,7 +377,8 @@ def main():
         "Programming Language",
         options=programming_languages,
         default=programming_languages,
-        help="Select one or more programming languages to filter by"
+        help="Select one or more programming languages to filter by",
+        disabled=st.session_state.get("is_running", False)
     )
     
     # Apply filters
@@ -384,6 +407,9 @@ def main():
                 selected_task, inferencer_model, judge_model,
                 selected_types, selected_levels, selected_languages
             )
+            # Check filesystem for existing outputs
+            inference_exists = os.path.exists(_inference_output_path(selected_task, inferencer_model))
+            # evaluation_exists not needed directly; rely on evaluation_score['data_loaded']
             
             if evaluation_score['data_loaded']:
                 col1, col2, col3, col4 = st.columns(4)
@@ -404,7 +430,53 @@ def main():
                 st.info(f"📁 Data loaded from: `output/{selected_task}/evl/{judge_model}/eval-cot-ref/{inferencer_model}.jsonl`")
                 
             else:
-                st.warning(f"No evaluation data found for the selected combination: {selected_task}, {inferencer_model} and {judge_model}.")
+                if not inference_exists:
+                    st.warning(f"No inference results found for the selected combination: {selected_task}, {inferencer_model}.")
+                else:
+                    st.warning(f"No evaluation data found for the selected combination: {selected_task}, {inferencer_model} and {judge_model}.")
+
+            # Action buttons for running inference/evaluation
+            st.markdown("---")
+            col_run1, col_run2 = st.columns(2)
+            with col_run1:
+                run_inf_disabled = (
+                    st.session_state.get("is_running", False)
+                    or inferencer_model is None
+                    or os.path.exists(_inference_output_path(selected_task, inferencer_model))
+                )
+                if st.button("🚀 Run inference", disabled=run_inf_disabled):
+                    try:
+                        st.session_state["is_running"] = True
+                        # Call directly so logs appear in the terminal running Streamlit
+                        inference_module.main(selected_task, inferencer_model)
+                    except Exception as e:
+                        st.error(f"Inference failed: {e}")
+                    finally:
+                        st.session_state["is_running"] = False
+                        st.rerun()
+            with col_run2:
+                run_eval_disabled = (
+                    st.session_state.get("is_running", False)
+                    or inferencer_model is None
+                    or judge_model is None
+                    or not os.path.exists(_inference_output_path(selected_task, inferencer_model))
+                    or os.path.exists(_evaluation_output_path(selected_task, inferencer_model, judge_model))
+                )
+                if st.button("🧪 Evaluate inferencer", disabled=run_eval_disabled):
+                    try:
+                        st.session_state["is_running"] = True
+                        # Use default prompt name used across the app
+                        evaluation_module.main(selected_task, "eval-cot-ref", inferencer_model, judge_model)
+                    except Exception as e:
+                        st.error(f"Evaluation failed: {e}")
+                    finally:
+                        # Clear cached eval data so Live score refreshes
+                        try:
+                            load_evaluation_data.clear()
+                        except Exception:
+                            pass
+                        st.session_state["is_running"] = False
+                        st.rerun()
         
         # Display statistics
         col_stats1, col_stats2, col_stats3 = st.columns(3)
@@ -450,7 +522,7 @@ def main():
             st.markdown("---")
             st.subheader("📋 Problem List")
             # Search functionality
-            search_term = st.text_input("🔍 Search in questions:", placeholder="Enter keywords to search...")
+            search_term = st.text_input("🔍 Search in questions:", placeholder="Enter keywords to search...", disabled=st.session_state.get("is_running", False))
             
             if search_term:
                 search_filtered = filtered_df[
@@ -483,7 +555,7 @@ def main():
     # Tab 2: Random Problem
     with tab2:        
         if len(filtered_df) > 0:
-            if st.button("🎯 Pick Random Problem", type="primary"):
+            if st.button("🎯 Pick Random Problem", type="primary", disabled=st.session_state.get("is_running", False)):
                 random_problem = filtered_df.sample(n=1).iloc[0]
                 st.session_state.random_problem = random_problem
             
@@ -497,7 +569,7 @@ def main():
                 question_preview = problem['question'][:200] + "..." if len(problem['question']) > 200 else problem['question']
                 st.text_area("Question Preview:", question_preview, height=100, disabled=True)
                 
-                if st.button("👁️ View Full Problem"):
+                if st.button("👁️ View Full Problem", disabled=st.session_state.get("is_running", False)):
                     st.session_state.show_full_problem = True
         else:
             st.warning("No problems match the current filters.")
@@ -510,7 +582,7 @@ def main():
                 st.markdown("## 📖 Full Problem Display")
                 st.markdown(format_problem_display(problem))
                 
-                if st.button("❌ Close Full View"):
+                if st.button("❌ Close Full View", disabled=st.session_state.get("is_running", False)):
                     st.session_state.show_full_problem = False
                     st.rerun()
     

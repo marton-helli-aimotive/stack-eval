@@ -6,6 +6,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 from utils import LLMS, PROMPTS, TASKS, batch_format_prompt, completion, setup_logger
+import os
 
 logger = setup_logger(__name__)
 
@@ -21,11 +22,13 @@ def main(task: str, model_name: str):
     model = LLMS[model_name]
     logger.info("Launching batch completion using model %s...", model_name)
 
+    # Allow override timeout via env
+    request_timeout = float(os.getenv("LLM_REQUEST_TIMEOUT", "120"))
     data["completion"] = completion(
         messages,
         custom_llm_provider=model['custom_llm_provider'],
         **model['model_parameters'], **model['sample_parameters'],
-        num_retries=3, timeout=60
+        num_retries=3, timeout=request_timeout
     )
     empty_completions = (data["completion"].str.len() == 0).sum()
     if empty_completions > 0:

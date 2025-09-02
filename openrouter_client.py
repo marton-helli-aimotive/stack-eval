@@ -19,6 +19,10 @@ class OpenRouterClient:
         self.base_url = "https://openrouter.ai/api/v1"
         self.models_cache_file = "config/openrouter_models_cache.yml"
         self.cache_duration = timedelta(hours=24)  # Cache models for 24 hours
+        try:
+            self.request_timeout = float(os.getenv("LLM_REQUEST_TIMEOUT", "120"))
+        except Exception:
+            self.request_timeout = 120.0
         
     def get_available_models(self, force_refresh: bool = False) -> Dict:
         """
@@ -57,7 +61,7 @@ class OpenRouterClient:
         response = requests.get(
             f"{self.base_url}/models",
             headers=headers,
-            timeout=30
+            timeout=self.request_timeout
         )
         response.raise_for_status()
         
@@ -191,7 +195,7 @@ class OpenRouterClient:
                 f"{self.base_url}/chat/completions",
                 headers=headers,
                 data=json.dumps(data),
-                timeout=60
+                timeout=float(kwargs.pop("timeout", self.request_timeout))
             )
             response.raise_for_status()
             

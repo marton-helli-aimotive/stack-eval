@@ -21,6 +21,11 @@ class OpenWebUIClient:
             logger.warning("OpenWebUI API key missing. Set OPENWEBUI_API_KEY in your environment to enable it.")
 
         self.base_url = (base_url or os.getenv("OPENWEBUI_BASE_URL") or "https://chat.aimotive.com/ollama/v1").rstrip("/")
+        # Allow configurable request timeout; default to 120s to reduce read timeouts
+        try:
+            self.request_timeout = float(os.getenv("LLM_REQUEST_TIMEOUT", "120"))
+        except Exception:
+            self.request_timeout = 120.0
         self.models_cache_file = "config/openwebui_models_cache.yml"
         self.cache_duration = timedelta(hours=24)
 
@@ -57,7 +62,7 @@ class OpenWebUIClient:
         }
 
         # Try OpenAI-compatible /models endpoint
-        response = requests.get(f"{self.base_url}/models", headers=headers, timeout=30)
+        response = requests.get(f"{self.base_url}/models", headers=headers, timeout=self.request_timeout)
         response.raise_for_status()
         data = response.json()
         return self._transform_models_data(data)
@@ -168,7 +173,7 @@ class OpenWebUIClient:
                 f"{self.base_url}/chat/completions",
                 headers=headers,
                 data=json.dumps(payload),
-                timeout=60,
+                timeout=float(kwargs.pop("timeout", self.request_timeout)),
             )
             response.raise_for_status()
             result = response.json()

@@ -14,6 +14,7 @@ from utils import (
     completion,
     setup_logger,
 )
+import os
 
 logger = setup_logger(__name__)
 
@@ -35,11 +36,12 @@ def main(task: str, prompt_name: str, evaluatee_model: str, evaluator_model: str
     logger.info("Launching batch completion using model %s...", evaluator_model)
 
     model = LLMS[evaluator_model]
+    request_timeout = float(os.getenv("LLM_REQUEST_TIMEOUT", "120"))
     completions = completion(
         messages,
         custom_llm_provider=model['custom_llm_provider'],
         **model['model_parameters'], **model['sample_parameters'],
-        num_retries=3, timeout=60
+        num_retries=3, timeout=request_timeout
     )
     parsed_completions = batch_parse_json(completions, expected_keys=prompt["output"])
     parsed_completions_df = pd.DataFrame(parsed_completions)

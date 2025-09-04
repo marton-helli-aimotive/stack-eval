@@ -734,10 +734,10 @@ def main():
                     except Exception:
                         return "Not evaluated"
                     labels = {
-                        0: "Completely Unacceptable",
-                        1: "Useful but Unacceptable",
-                        2: "Acceptable",
-                        3: "Optimal",
+                        0: "0 Completely Unacceptable",
+                        1: "1 Useful but Unacceptable",
+                        2: "2 Acceptable",
+                        3: "3 Optimal",
                     }
                     return labels.get(s, "Not evaluated")
 
@@ -748,10 +748,10 @@ def main():
                 def _stacked_chart(df: pd.DataFrame, col: str, title: str):
                     agg = df.groupby([col, "status"]).size().reset_index(name="count")
                     domain = [
-                        "Completely Unacceptable",
-                        "Useful but Unacceptable",
-                        "Acceptable",
-                        "Optimal",
+                        "0 Completely Unacceptable",
+                        "1 Useful but Unacceptable",
+                        "2 Acceptable",
+                        "3 Optimal",
                         "Not evaluated",
                     ]
                     colors = ["#e74c3c", "#e67e22", "#f1c40f", "#2ecc71", "#3498db"]
